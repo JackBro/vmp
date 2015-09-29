@@ -1,3 +1,33 @@
+/*
+ * --------------------------
+ *    vmpmemory:
+ *    Author: Colm Quinn  
+ *    quinncolm@optonline.net
+ * ----------------------------
+ *
+ *  Core logic for libvmpmemory
+ *  This source front ends the C library memory functions.
+ *  The key is not to use any library methods that allocate or free
+ *  memory.  Trickier than it seems.  vmputils.c contains some very 
+ *  simple (and not safe outside this limited scope ) substitues for
+ *  the C library methods used here. 
+ *
+ *  Example usage:
+ *
+ *   //Start the reporting server
+ *    ./vmpserver.pl 7777
+ *
+ *   //run the application (tmemory in this example)
+ *
+ *    export VMPMEMORY_REPORTHOST=127.0.0.1:7777
+ *    export VMPMEMORY_STDERR=1
+ *    export VMPMEMORY_REPORTFILE=$PWD/vmpdata
+ *    LD_PRELOAD=$PWD/libvmpmemory.so.0.1 ./tmemory
+ *
+ */
+
+
+
 #define _GNU_SOURCE 
 #include <dlfcn.h>
 
@@ -320,13 +350,21 @@ static const char jsonoldaddr[] = ",\"oldaddr\":";
 static const char jsonbt[]      = ",\"bt\":";
 
 
-static const char jsonalloc[]  = "{\"m\":\"%s\",\"sz\":%zu,\"addr\":%p,\"bt\":\"%s\"}";
-static const char jsonrealloc[]  = "{\"m\":\"realloc\",\"sz\":%zu,\"oldaddr\":%p,\"addr\":%p,\"bt\":\"%s\"}";
-static const char jsonfree[]   =  "{\"m\":\"free\",\"addr\":%p,\"bt\":\"%s\"}";
+static const char jsonalloc[]  = "{\"m\":\"%s\",\"sz\":%zu,\"addr\":%p}";
+static const char jsonrealloc[]  = "{\"m\":\"realloc\",\"sz\":%zu,\"oldaddr\":%p,\"addr\":%p}";
+static const char jsonfree[]   =  "{\"m\":\"free\",\"addr\":%p,}";
+
+static const char jsonallocbt[]  = "{\"m\":\"%s\",\"sz\":%zu,\"addr\":%p,\"bt\":\"%s\"}";
+static const char jsonreallocbt[]  = "{\"m\":\"realloc\",\"sz\":%zu,\"oldaddr\":%p,\"addr\":%p,\"bt\":\"%s\"}";
+static const char jsonfreebt[]   =  "{\"m\":\"free\",\"addr\":%p,\"bt\":\"%s\"}";
+
+
 
 static void formatjson(int method, size_t size, void* ptr, char* bt, char* buffer, size_t* jsonsize) {
    buffer[0] = 0;
    char tbuffer[128];
+
+//config_includeBacktrace
 
    if (size == 0) {
        strcpy(tbuffer, "#Memory size is 0");
@@ -338,10 +376,20 @@ static void formatjson(int method, size_t size, void* ptr, char* bt, char* buffe
    }
 
    if (method == MALLOC) {
-       vmpsprintf(buffer, jsonalloc, "alloc", size, ptr, bt);
+       if (config_includeBacktrace == true) {
+           vmpsprintf(buffer, jsonallocbt, "alloc", size, ptr, bt);
+       }
+       else {
+          vmpsprintf(buffer, jsonalloc, "alloc", size, ptr);
+       }
    }
    else if (method == CALLOC) {
-       vmpsprintf(buffer, jsonalloc, "calloc", size, ptr, bt);
+       if (config_includeBacktrace == true) {
+           vmpsprintf(buffer, jsonallocbt, "calloc", size, ptr, bt);
+       }
+       else {
+          vmpsprintf(buffer, jsonalloc, "calloc", size, ptr);
+       }
    }
 
    *jsonsize = strlen(buffer);
@@ -349,13 +397,23 @@ static void formatjson(int method, size_t size, void* ptr, char* bt, char* buffe
 }
 
 static void formatjson_realloc(size_t size, void *oldptr, void* ptr, char* bt, char* buffer, size_t* jsonsize) {
-   vmpsprintf(buffer, jsonrealloc, size, oldptr, ptr, bt);
+   if (config_includeBacktrace == true) {
+       vmpsprintf(buffer, jsonreallocbt, size, oldptr, ptr, bt);
+   }
+   else {
+       vmpsprintf(buffer, jsonrealloc, size, oldptr, ptr);
+   }
    *jsonsize = strlen(buffer);
    return;
 }
 
 static void formatjson_free(void* ptr, char* bt, char* buffer, size_t* jsonsize) {
-   vmpsprintf(buffer, jsonfree, ptr, bt);
+   if (config_includeBacktrace == true) {
+       vmpsprintf(buffer, jsonfreebt, ptr, bt);
+   }
+   else {
+       vmpsprintf(buffer, jsonfree, bt);
+   }
    *jsonsize = strlen(buffer);
    return;
 }
